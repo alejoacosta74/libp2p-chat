@@ -1,4 +1,4 @@
-module libp2p-chat-room
+module github.com/alejoacosta74/libp2p-chat-app
 
 go 1.22.0
 

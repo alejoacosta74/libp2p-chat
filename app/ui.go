@@ -5,7 +5,6 @@ import (
 	"io"
 	"time"
 
-	"github.com/alejoacosta74/go-logger"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -18,10 +17,10 @@ type ChatUI struct {
 	cr        *ChatRoom
 	app       *tview.Application
 	peersList *tview.TextView
-
-	msgW    io.Writer
-	inputCh chan string
-	doneCh  chan struct{}
+	logView   *tview.TextView
+	msgW      io.Writer
+	inputCh   chan string
+	doneCh    chan struct{}
 }
 
 // NewChatUI returns a new ChatUI struct that controls the text UI.
@@ -68,6 +67,7 @@ func NewChatUI(cr *ChatRoom) *ChatUI {
 		}
 
 		// send the line onto the input chan and reset the field text
+		// The inputCh is used to send messages to the chat room via the handleEvents() function
 		inputCh <- line
 		input.SetText("")
 	})
@@ -78,11 +78,26 @@ func NewChatUI(cr *ChatRoom) *ChatUI {
 	peersList.SetTitle("Peers")
 	peersList.SetChangedFunc(func() { app.Draw() })
 
+	// Create log view
+	logView := tview.NewTextView()
+	logView.SetDynamicColors(true)
+	logView.SetBorder(true)
+	logView.SetTitle("Logs")
+	logView.SetChangedFunc(func() {
+		app.Draw()
+	})
+
+	// Create right panel with peers list and logs
+	rightPanel := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(peersList, 0, 1, false).
+		AddItem(logView, 0, 2, false) // Log view takes 2/3 of right panel
+
 	// chatPanel is a horizontal box with messages on the left and peers on the right
 	// the peers list takes 20 columns, and the messages take the remaining space
 	chatPanel := tview.NewFlex().
-		AddItem(msgBox, 0, 1, false).
-		AddItem(peersList, 20, 1, false)
+		AddItem(msgBox, 0, 2, false).
+		AddItem(rightPanel, 60, 1, false)
 
 	// flex is a vertical box with the chatPanel on top and the input field at the bottom.
 
@@ -97,6 +112,7 @@ func NewChatUI(cr *ChatRoom) *ChatUI {
 		cr:        cr,
 		app:       app,
 		peersList: peersList,
+		logView:   logView,
 		msgW:      msgBox,
 		inputCh:   inputCh,
 		doneCh:    make(chan struct{}, 1),
@@ -146,6 +162,13 @@ func (ui *ChatUI) displaySelfMessage(msg string) {
 	fmt.Fprintf(ui.msgW, "%s %s\n", prompt, msg)
 }
 
+// Add a method to display logs
+func (ui *ChatUI) DisplayLog(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	timestamp := time.Now().Format("15:04:05")
+	fmt.Fprintf(ui.logView, "[gray]%s[-] %s\n", timestamp, msg)
+}
+
 // handleEvents runs an event loop that sends user input to the chat room
 // and displays messages received from the chat room. It also periodically
 // refreshes the list of peers in the UI.
@@ -156,18 +179,23 @@ func (ui *ChatUI) handleEvents() {
 	for {
 		select {
 		case input := <-ui.inputCh:
+			ui.DisplayLog("Sending message: %s", input)
 			// when the user types in a line, publish it to the chat room and print to the message window
 			err := ui.cr.Publish(input)
 			if err != nil {
-				logger.WithFields("error", err.Error()).Error("failed to publish message")
+				ui.DisplayLog("[red]Failed to publish message: %s", err.Error())
 			}
 			ui.displaySelfMessage(input)
+			ui.DisplayLog("[green]Message sent successfully[-]")
 
-		case m := <-ui.cr.Messages:
+		case m := <-ui.cr.inboundChan:
+			ui.DisplayLog("Received message from %s", m.SenderNick)
 			// when we receive a message from the chat room, print it to the message window
 			ui.displayChatMessage(m)
 
 		case <-peerRefreshTicker.C:
+			peers := ui.cr.ListPeers()
+			ui.DisplayLog("%d peers connected", len(peers))
 			// refresh the list of peers in the chat room periodically
 			ui.refreshPeers()
 

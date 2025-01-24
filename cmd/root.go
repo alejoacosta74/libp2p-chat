@@ -23,8 +23,9 @@ package cmd
 
 import (
 	"context"
-	"libp2p-chat-room/app"
 	"os"
+
+	"github.com/alejoacosta74/libp2p-chat-app/app"
 
 	"github.com/alejoacosta74/go-logger"
 	"github.com/spf13/cobra"
@@ -39,7 +40,8 @@ var rootCmd = &cobra.Command{
 	The app runs in the terminal, and uses a text UI to show messages from other peers`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
-	Run: run,
+	Run:               run,
+	PersistentPreRunE: preRun,
 }
 
 func Execute() {
@@ -70,4 +72,13 @@ func run(cmd *cobra.Command, args []string) {
 	}()
 	<-ctx.Done()
 	logger.Warn("shutdown complete")
+}
+
+func preRun(cmd *cobra.Command, args []string) error {
+	logLevel := viper.GetString("log")
+	if logLevel == "" {
+		logLevel = "info"
+	}
+	logger.SetLevel(logLevel)
+	return nil
 }

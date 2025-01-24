@@ -21,7 +21,7 @@ THE SOFTWARE.
 */
 package main
 
-import "libp2p-chat-room/cmd"
+import "github.com/alejoacosta74/libp2p-chat-app/cmd"
 
 func main() {
 	cmd.Execute()
