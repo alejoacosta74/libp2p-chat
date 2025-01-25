@@ -13,18 +13,20 @@ import (
 
 type Node struct {
 	host.Host
-	ctx    context.Context
-	quitCh chan struct{}
-	// libp2p bandwidth counter
+	ctx              context.Context
+	quitCh           chan struct{}
 	bandwidthCounter *libp2pmetrics.BandwidthCounter
+	*pubsub.PubSub
 }
 
 func NewNode(ctx context.Context) *Node {
 	bwctr := libp2pmetrics.NewBandwidthCounter()
 	node, err := libp2p.New(
 		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"),
-		// Set up libp2p bandwitdh reporting
 		libp2p.BandwidthReporter(bwctr),
+		// libp2p.Security(noise.ID, noise.New),
+		// libp2p.EnableRelay(),
+		// libp2p.NATPortMap(),
 	)
 	if err != nil {
 		logger.Fatalf("failed to create host: %v", err)
@@ -38,7 +40,12 @@ func NewNode(ctx context.Context) *Node {
 
 // create a new PubSub service using the GossipSub router
 func (n *Node) CreatePubSubService() (*pubsub.PubSub, error) {
-	return pubsub.NewGossipSub(n.ctx, n)
+	ps, err := pubsub.NewGossipSub(n.ctx, n)
+	if err != nil {
+		return nil, err
+	}
+	n.PubSub = ps
+	return ps, nil
 }
 
 // Init initializes the node and its dependencies
@@ -54,6 +61,7 @@ func (n *Node) Init() error {
 
 	// start the mdns discovery service
 	go discovery.InitMDNSdiscovery(n.ctx, n)
+	go n.InitStats()
 
 	return nil
 }

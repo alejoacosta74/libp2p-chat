@@ -86,24 +86,35 @@ func NewChatUI(cr *ChatRoom) *ChatUI {
 	logView.SetChangedFunc(func() {
 		app.Draw()
 	})
+	// enable scrolling
+	logView.SetScrollable(true)
+	logView.SetMaxLines(20)
+	logView.SetWrap(true)
+	logView.ScrollToEnd()
 
-	// Create right panel with peers list and logs
-	rightPanel := tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(peersList, 0, 1, false).
-		AddItem(logView, 0, 2, false) // Log view takes 2/3 of right panel
+	// Add mouse wheel support
+	logView.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if action == tview.MouseScrollUp {
+			row, _ := logView.GetScrollOffset()
+			logView.ScrollTo(row-1, 0)
+			return action, nil
+		}
+		if action == tview.MouseScrollDown {
+			row, _ := logView.GetScrollOffset()
+			logView.ScrollTo(row+1, 0)
+			return action, nil
+		}
+		return action, event
+	})
 
-	// chatPanel is a horizontal box with messages on the left and peers on the right
-	// the peers list takes 20 columns, and the messages take the remaining space
-	chatPanel := tview.NewFlex().
-		AddItem(msgBox, 0, 2, false).
-		AddItem(rightPanel, 60, 1, false)
-
-	// flex is a vertical box with the chatPanel on top and the input field at the bottom.
+	topPanel := tview.NewFlex().
+		AddItem(msgBox, 0, 3, false).    // Messages take 3/4 of width
+		AddItem(peersList, 25, 1, false) // Peers list takes 25 columns
 
 	flex := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(chatPanel, 0, 1, false).
+		AddItem(topPanel, 0, 2, false).
+		AddItem(logView, 20, 4, false).
 		AddItem(input, 1, 1, true)
 
 	app.SetRoot(flex, true)
@@ -167,6 +178,7 @@ func (ui *ChatUI) DisplayLog(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
 	timestamp := time.Now().Format("15:04:05")
 	fmt.Fprintf(ui.logView, "[gray]%s[-] %s\n", timestamp, msg)
+	ui.logView.ScrollToEnd()
 }
 
 // handleEvents runs an event loop that sends user input to the chat room
@@ -179,7 +191,7 @@ func (ui *ChatUI) handleEvents() {
 	for {
 		select {
 		case input := <-ui.inputCh:
-			ui.DisplayLog("Sending message: %s", input)
+			ui.DisplayLog("Publishing message: %s", input)
 			// when the user types in a line, publish it to the chat room and print to the message window
 			err := ui.cr.Publish(input)
 			if err != nil {
@@ -194,8 +206,6 @@ func (ui *ChatUI) handleEvents() {
 			ui.displayChatMessage(m)
 
 		case <-peerRefreshTicker.C:
-			peers := ui.cr.ListPeers()
-			ui.DisplayLog("%d peers connected", len(peers))
 			// refresh the list of peers in the chat room periodically
 			ui.refreshPeers()
 

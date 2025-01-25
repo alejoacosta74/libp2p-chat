@@ -11,10 +11,6 @@ import (
 
 func Run(ctx context.Context) error {
 	p2pNode := node.NewNode(ctx)
-	err := p2pNode.Init()
-	if err != nil {
-		return err
-	}
 
 	ps, err := p2pNode.CreatePubSubService()
 	if err != nil {
@@ -29,6 +25,11 @@ func Run(ctx context.Context) error {
 	ui := NewChatUI(cr)
 	uilogger.InitGlobalLogger(ui)
 	logger.SetOutput(uilogger.GlobalUILogger)
+
+	err = p2pNode.Init()
+	if err != nil {
+		return err
+	}
 
 	return ui.Run()
 }

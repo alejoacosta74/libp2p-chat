@@ -1,8 +1,8 @@
 module github.com/alejoacosta74/libp2p-chat-app
 
-go 1.22.0
+go 1.23.1
 
-toolchain go1.22.9
+toolchain go1.23.4
 
 replace github.com/alejoacosta74/go-logger => ../../mylogger2
 
