@@ -61,6 +61,7 @@ func (n *Node) Init() error {
 
 	// start the mdns discovery service
 	go discovery.InitMDNSdiscovery(n.ctx, n)
+	go discovery.InitDHTDiscovery(n.ctx, n)
 	go n.InitStats()
 
 	return nil

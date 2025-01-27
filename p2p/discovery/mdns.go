@@ -12,6 +12,9 @@ import (
 
 const (
 	DefaultRetries = 3
+
+	// DiscoveryInterval is how often we re-publish our mDNS records.
+	DiscoveryInterval = time.Hour
 )
 
 // setupDiscovery creates an mDNS discovery service and attaches it to the libp2p Host.
@@ -21,12 +24,6 @@ func InitMDNSdiscovery(ctx context.Context, n host.Host) error {
 	d := mdns.NewMdnsService(n, DiscoveryServiceTag, &discoveryNotifee{h: n, ctx: ctx, retries: DefaultRetries})
 	return d.Start()
 }
-
-// DiscoveryInterval is how often we re-publish our mDNS records.
-const DiscoveryInterval = time.Hour
-
-// DiscoveryServiceTag is used in our mDNS advertisements to discover other chat peers.
-const DiscoveryServiceTag = "pubsub-chat-example"
 
 // discoveryNotifee gets notified when we find a new peer via mDNS discovery
 type discoveryNotifee struct {
