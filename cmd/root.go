@@ -34,9 +34,9 @@ import (
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "chat",
+	Use:   "p2p-chat",
 	Short: "libp2p chat room",
-	Long: `example project builds a chat room application using go-libp2p-pubsub. 
+	Long: `p2p-chat is a chat room application using go-libp2p-pubsub. 
 	The app runs in the terminal, and uses a text UI to show messages from other peers`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
@@ -55,9 +55,11 @@ func init() {
 	rootCmd.Flags().StringP("nickname", "n", "", "nickname")
 	rootCmd.Flags().StringP("room", "r", "", "chat room name")
 	rootCmd.Flags().StringP("log", "l", "info", "log level")
+	rootCmd.Flags().StringP("logfile", "f", "chat.log", "log file name")
 	viper.BindPFlag("nickname", rootCmd.Flags().Lookup("nickname"))
 	viper.BindPFlag("room", rootCmd.Flags().Lookup("room"))
 	viper.BindPFlag("log", rootCmd.Flags().Lookup("log"))
+	viper.BindPFlag("logfile", rootCmd.Flags().Lookup("logfile"))
 }
 
 func run(cmd *cobra.Command, args []string) {

@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	statsInterval = 20 * time.Second
+	statsInterval = 60 * time.Second
 )
 
 func (n *Node) InitStats() {

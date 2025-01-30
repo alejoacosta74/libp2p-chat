@@ -2,6 +2,8 @@ package discovery
 
 import (
 	"context"
+	"runtime/debug"
+	"sync"
 	"time"
 
 	"github.com/alejoacosta74/go-logger"
@@ -17,12 +19,46 @@ const (
 	DiscoveryInterval = time.Hour
 )
 
-// setupDiscovery creates an mDNS discovery service and attaches it to the libp2p Host.
-// This lets us automatically discover peers on the same LAN and connect to them.
-func InitMDNSdiscovery(ctx context.Context, n host.Host) error {
-	// setup mDNS discovery to find local peers
-	d := mdns.NewMdnsService(n, DiscoveryServiceTag, &discoveryNotifee{h: n, ctx: ctx, retries: DefaultRetries})
-	return d.Start()
+type MDNSDiscovery struct {
+	host   host.Host
+	config *DiscoveryConfig
+	ctx    context.Context
+	// Channel to receive discovered peers from HandlePeerFound
+	peerChan chan peer.AddrInfo
+	cancel   context.CancelFunc
+	wg       sync.WaitGroup
+}
+
+func NewMDNSDiscovery(h host.Host, config *DiscoveryConfig) *MDNSDiscovery {
+	if config == nil {
+		config = NewDiscoveryConfig()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	return &MDNSDiscovery{
+		host:     h,
+		config:   config,
+		peerChan: make(chan peer.AddrInfo, config.MaxPeers),
+		ctx:      ctx,
+		cancel:   cancel,
+		wg:       sync.WaitGroup{},
+	}
+}
+
+func (d *MDNSDiscovery) Start(ctx context.Context) error {
+	discoveryNotifee := &discoveryNotifee{
+		h:       d.host,
+		ctx:     d.ctx,
+		retries: DefaultRetries,
+		md:      d,
+	}
+	discovery := mdns.NewMdnsService(d.host, d.config.ServiceTag, discoveryNotifee)
+	return discovery.Start()
+}
+
+func (d *MDNSDiscovery) Stop() error {
+	d.cancel()
+	d.wg.Wait()
+	return nil
 }
 
 // discoveryNotifee gets notified when we find a new peer via mDNS discovery
@@ -30,12 +66,19 @@ type discoveryNotifee struct {
 	h       host.Host
 	ctx     context.Context
 	retries int // number of retries to connect to a discovered peer
+	md      *MDNSDiscovery
 }
 
 // HandlePeerFound connects to peers discovered via mDNS. Once they're connected,
 // the PubSub system will automatically start interacting with them if they also
 // support PubSub.
 func (d *discoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
+	// in case of panic, recover and log the stack trace
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("panic in HandlePeerFound", "error", r, "stack", string(debug.Stack()))
+		}
+	}()
 	// Skip if trying to connect to self
 	if pi.ID == d.h.ID() {
 		logger.Debug("skipping self connection", "peer", pi.ID)
@@ -51,11 +94,20 @@ func (d *discoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
 		logger.Debugf("attempting to connect to peer %s", pi.ID)
 		err = d.h.Connect(connectCtx, pi)
 		if err == nil {
-			logger.Info("successfully connected to peer", "peer", pi.ID)
-			return
+			select {
+			case d.md.peerChan <- pi:
+				logger.Infof("mDNS: discovered peer %s with address %s", pi.ID, pi.Addrs)
+			case <-d.ctx.Done():
+				logger.Info("context done, stopping discovery")
+				return
+			default:
+				// peer channel is full, discard the peer
+				logger.Warn("peer channel is full, discarding peer", "peer", pi.ID)
+				return
+			}
+		} else {
+			logger.Debugf("connection attempt %d failed for peer %+v: %v", i+1, pi, err)
 		}
-
-		logger.Debugf("connection attempt %d failed for peer %s: %s", i+1, pi.ID, err.Error())
 
 		// Wait before retrying
 		time.Sleep(time.Second * time.Duration(i+1))
@@ -67,4 +119,37 @@ func (d *discoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
 			"peer", pi.ID,
 			"error", err.Error())
 	}
+}
+
+// DiscoverPeers implements the PeerDiscovery interface by returning the channel
+// that receives peers from HandlePeerFound
+func (d *MDNSDiscovery) DiscoverPeers(ctx context.Context) (<-chan peer.AddrInfo, error) {
+	// Create a new channel for the consumer
+	outChan := make(chan peer.AddrInfo, d.config.MaxPeers)
+
+	d.wg.Add(1)
+	go func() {
+		defer d.wg.Done()
+		defer close(outChan)
+
+		for {
+			select {
+			case peer := <-d.peerChan:
+				// Forward discovered peers to the consumer
+				select {
+				case outChan <- peer:
+				case <-ctx.Done():
+					return
+				case <-d.ctx.Done():
+					return
+				}
+			case <-ctx.Done():
+				return
+			case <-d.ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return outChan, nil
 }

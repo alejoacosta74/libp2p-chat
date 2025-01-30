@@ -4,13 +4,10 @@ go 1.23.1
 
 toolchain go1.23.4
 
-replace github.com/alejoacosta74/go-logger => ../../mylogger2
-
 require (
-	github.com/alejoacosta74/go-logger v0.0.0-00010101000000-000000000000
+	github.com/alejoacosta74/go-logger v0.2.5
 	github.com/gdamore/tcell/v2 v2.7.4
 	github.com/libp2p/go-libp2p v0.38.1
-	github.com/libp2p/go-libp2p-core v0.20.1
 	github.com/libp2p/go-libp2p-kad-dht v0.28.2
 	github.com/libp2p/go-libp2p-pubsub v0.12.0
 	github.com/rivo/tview v0.0.0-20241103174730-c76f7879f592
@@ -163,6 +160,7 @@ require (
 	gonum.org/v1/gonum v0.15.0 // indirect
 	google.golang.org/protobuf v1.36.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/blake3 v1.3.0 // indirect
 )

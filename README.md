@@ -1,222 +1,162 @@
-https://github.com/libp2p/go-libp2p/blob/v0.37.0/examples/pubsub/chat/README.md
+# 🌐 LibP2P Showcase: A Decentralized Chat Application
 
-# go-libp2p-pubsub chat example
+A proof-of-concept application demonstrating core libp2p concepts through a decentralized chat interface. This project showcases peer discovery mechanisms, pubsub patterns, and real-time network monitoring in a practical P2P environment.
 
-This example project builds a chat room application using go-libp2p-pubsub. The app runs in the terminal,
-and uses a text UI to show messages from other peers:
+![Demo Screenshot Placeholder](screenshot.png)
 
-![An animation showing three terminal windows, each running the example application.](./chat-example.gif)
+## 🎯 Project Overview
 
-The goal of this example is to demonstrate the basic usage of the `PubSub` API, without getting into
-the details of configuration.
+This application serves as a practical demonstration of key libp2p features:
+- Hybrid peer discovery (mDNS + Kademlia DHT)
+- PubSub messaging patterns
+- Real-time network event monitoring
+- P2P connection management
+- Protocol negotiation
 
-## Running
+## 🔬 Technical Architecture
 
-Clone this repo, then `cd` into the `examples/pubsub/chat` directory:
+### Peer Discovery Implementation
 
-```shell
-git clone https://github.com/libp2p/go-libp2p
-cd go-libp2p/examples/pubsub/chat
-```
-
-Now you can either run with `go run`, or build and run the binary:
-
-```shell
-go run .
-
-# or, build and run separately
-go build .
-./chat
-```
-
-To set a nickname, use the `-nick` flag:
-
-```shell
-go run . -nick=zoidberg
-```
-
-You can join a specific chat room with the `-room` flag:
-
-```shell
-go run . -room=planet-express
-```
-
-It's usually more fun to chat with others, so open a new terminal and run the app again.
-If you set a custom chat room name with the `-room` flag, make sure you use the same one
-for both apps. Once the new instance starts, the two chat apps should discover each other 
-automatically using mDNS, and typing a message into one app will send it to any others that are open.
-
-To quit, hit `Ctrl-C`, or type `/quit` into the input field.
-
-## Code Overview
-
-In [`main.go`](./main.go), we create a new libp2p `Host` and then create a new `PubSub` service
-using the GossipSub router:
-
+#### Local Network Discovery (mDNS)
+- Uses multicast DNS for zero-configuration networking
+- Automatic peer discovery within the same LAN
+- Implementation of the mDNS discovery service interface
+- Configurable retry mechanisms and connection handling
 ```go
-func main() {
-	// (omitted) parse flags, etc...
-
-	// create a new libp2p Host that listens on a random TCP port
-	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
-	if err != nil {
-		panic(err)
-	}
-
-	// create a new PubSub service using the GossipSub router
-	ps, err := pubsub.NewGossipSub(ctx, h)
-	if err != nil {
-		panic(err)
-	}
-
-   // (omitted) setup mDNS discovery...
-   
-}
-``` 
-
-We configure the host to use local mDNS discovery, so that we can find other peers to chat with
-on the local network. We also parse a few command line flags, so we can set a friendly nickname,
-or choose a chat room by name.
-
-Once we have a `Host` with an attached `PubSub` service, we join a `ChatRoom`:
-
-```go
-    // still in the main func
-    cr, err := JoinChatRoom(ctx, ps, h.ID(), nick, room)
-  	if err != nil {
-  		panic(err)
-  	}
-```
- 
-`ChatRoom` is a custom struct defined in [`chatroom.go`](./chatroom.go):
-
-```go
-// ChatRoom represents a subscription to a single PubSub topic. Messages
-// can be published to the topic with ChatRoom.Publish, and received
-// messages are pushed to the Messages channel.
-type ChatRoom struct {
-	// Messages is a channel of messages received from other peers in the chat room
-	Messages chan *ChatMessage
-
-	ctx   context.Context
-	ps    *pubsub.PubSub
-	topic *pubsub.Topic
-	sub   *pubsub.Subscription
-
-	roomName string
-	self     peer.ID
-	nick     string
+type MDNSDiscovery struct {
+    host      host.Host
+    peerChan  chan peer.AddrInfo
+    // ... other fields
 }
 ```
 
-A `ChatRoom` subscribes to a PubSub `Topic`, and reads messages from the `Subscription`. We're sending our messages
-wrapped inside of a `ChatMessage` struct:
-
+#### Global Network Discovery (Kademlia DHT)
+- Distributed Hash Table based on Kademlia protocol
+- Provides decentralized peer discovery across the internet
+- Uses bootstrap nodes for initial network joining
+- Implements key-based routing with XOR metric
 ```go
-type ChatMessage struct {
-	Message    string
-	SenderID   string
-	SenderNick string
+type DHTDiscovery struct {
+    dht       *dht.IpfsDHT
+    discovery *routing.RoutingDiscovery
+    // ... other fields
 }
 ```
 
-This lets us attach friendly nicknames to the messages for display. A real app might want to make sure that
-nicks are unique, but we just let anyone claim whatever nick they want and send it along with their messages.
+### PubSub Messaging
+- Built on libp2p's GossipSub protocol
+- Topic-based message routing
+- Automatic peer discovery and mesh formation
+- Configurable message validation and scoring
 
-The `ChatMessage`s are encoded to JSON and published to the PubSub topic, in the `Data` field of a `pubsub.Message`.
-We could have used any encoding, as long as everyone in the topic agrees on the format, but JSON is simple and good 
-enough for our purposes. 
+### Real-Time Network Monitoring
+- Event-driven architecture tracking network state
+- Monitored events include:
+  - Peer connections/disconnections
+  - Protocol negotiations
+  - NAT traversal status
+  - Local/remote address updates
+  - Peer identification lifecycle
 
-To send messages, we have a `Publish` method, which wraps messages in `ChatMessage` structs, encodes them, and publishes 
-to the `pubsub.Topic`:
+## 📊 Performance Metrics
 
+The application provides real-time monitoring of:
 ```go
-func (cr *ChatRoom) Publish(message string) error {
-	m := ChatMessage{
-		Message:    message,
-		SenderID:   cr.self.String(),
-		SenderNick: cr.nick,
-	}
-	msgBytes, err := json.Marshal(m)
-	if err != nil {
-		return err
-	}
-	return cr.topic.Publish(cr.ctx, msgBytes)
-}
+// Metrics updated every 60 seconds
+- Bandwidth usage (in/out rates)
+- PubSub-specific bandwidth
+- Connected peers count
+- Active protocols
+- Memory utilization
 ```
 
-In the background, the `ChatRoom` runs a `readLoop` goroutine, which reads messages from the `pubsub.Subscription`,
-decodes the `ChatMessage` JSON, and sends the `ChatMessage`s on a channel:
+## 🚀 Getting Started
 
-```go
-func (cr *ChatRoom) readLoop() {
-	for {
-		msg, err := cr.sub.Next(cr.ctx)
-		if err != nil {
-			close(cr.Messages)
-			return
-		}
-		// only forward messages delivered by others
-		if msg.ReceivedFrom == cr.self {
-			continue
-		}
-		cm := new(ChatMessage)
-		err = json.Unmarshal(msg.Data, cm)
-		if err != nil {
-			continue
-		}
-		// send valid messages onto the Messages channel
-		cr.Messages <- cm
-	}
-}
+### Installation
+```bash
+git clone https://github.com/alejoacosta74/p2p-chat
+cd p2p-chat
+go build
 ```
 
-There's also a `ListPeers` method, which just wraps the method of the same name in the `PubSub` service:
+### Command-Line Options
+```bash
+Usage: p2p-chat [flags]
 
-```go
-func (cr *ChatRoom) ListPeers() []peer.ID {
-	return cr.ps.ListPeers(topicName(cr.roomName))
-}
+Flags:
+  -n, --nickname string   Nickname for chat (default "anonymous")
+  -r, --room string      Chat room name (default "default")
+  -l, --log string       Log level [debug|info|warn|error] (default "info")
+  -f, --logfile string   Log file name (default "chat.log")
 ```
 
-That's pretty much it for the `ChatRoom`! 
-
-Back in `main.go`, once we've created our `ChatRoom`, we pass it
-to `NewChatUI`, which constructs a three panel text UI for entering and viewing chat messages, because UIs
-are fun.
-
-The `ChatUI` is defined in [`ui.go`](./ui.go), and the interesting bit is in the `handleEvents` event loop
-method:
-
-```go
-func (ui *ChatUI) handleEvents() {
-	peerRefreshTicker := time.NewTicker(time.Second)
-	defer peerRefreshTicker.Stop()
-
-	for {
-		select {
-		case input := <-ui.inputCh:
-			// when the user types in a line, publish it to the chat room and print to the message window
-			err := ui.cr.Publish(input)
-			if err != nil {
-				printErr("publish error: %s", err)
-			}
-			ui.displaySelfMessage(input)
-
-		case m := <-ui.cr.Messages:
-			// when we receive a message from the chat room, print it to the message window
-			ui.displayChatMessage(m)
-
-		case <-peerRefreshTicker.C:
-			// refresh the list of peers in the chat room periodically
-			ui.refreshPeers()
-
-		case <-ui.cr.ctx.Done():
-			return
-
-		case <-ui.doneCh:
-			return
-		}
-	}
-}
+### Debug Mode
+Start with debug logging to see detailed libp2p events:
+```bash
+./p2p-chat --log debug
 ```
+This enables the real-time event panel showing:
+- Protocol negotiations
+- Peer discovery events
+- Connection state changes
+- NAT traversal updates
+- DHT operations
+
+## 🖥️ User Interface
+
+### Multi-Panel Terminal UI
+1. **Message Area**: Chat messages with colored nicknames
+2. **Peer List**: Active participants in current room
+3. **Event Log Panel**: Real-time libp2p events and metrics
+4. **Input Field**: Message composition with commands
+
+### Debug Panel Features
+- Real-time libp2p event streaming
+- Network metrics updates
+- Protocol negotiation logs
+- Peer discovery events
+- Connection state changes
+
+## 🔜 Technical Roadmap
+
+### Network Improvements
+- [ ] Custom peer scoring implementation
+- [ ] Advanced DHT configuration options
+- [ ] Alternative transport protocols (QUIC, WebRTC)
+- [ ] Custom protocol handlers
+
+### Monitoring Enhancements
+- [ ] Custom event subscribers
+- [ ] Performance profiling tools
+
+### Security Features
+- [ ] Noise protocol integration
+- [ ] Custom PubSub message validation
+- [ ] Peer authentication mechanisms
+- [ ] Rate limiting implementation
+
+## 🛠️ Development
+
+This project serves as a learning tool for understanding:
+- P2P network architecture
+- Distributed systems concepts
+- libp2p protocol stack
+- Network event handling
+- Decentralized discovery mechanisms
+
+## 📚 References
+
+- [libp2p Documentation](https://docs.libp2p.io/)
+- [Kademlia DHT Paper](https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf)
+- [GossipSub Specification](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.0.md)
+- [mDNS RFC](https://datatracker.ietf.org/doc/html/rfc6762)
+
+## 📜 License
+
+MIT License - see [LICENSE](LICENSE)
+
+---
+
+<p align="center">
+Built with libp2p | UI powered by tview
+</p>
